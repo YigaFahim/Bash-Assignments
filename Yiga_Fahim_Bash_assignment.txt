@@ -1,0 +1,153 @@
+## YIGA FAHIM_________Reg No: 2022/HD07/2054U
+
+
+## Manipulating VCF files
+
+# 1. Describe the format of the file and the data stored.
+	VCF files contain genetic variation data, such as SNPS, insertions and deletions, and structural variants.
+	The format is made up of a header section that contains meta information about the file and the data it contains, 
+	a column header line, and one or more lines of data for each variant. The header section of the vcf begins
+	with "##" and includes information such as file format version, reference genome used, and the name of the software
+	that generated the data.
+
+# 2. What does the header section of the file contain
+	The header section contains meta data about the file and its contents, such as the file format version, sample 
+	information, and the reference genome used.
+
+head sample.vcf
+
+# 3. How many samples are in the file?
+	6 samples
+vcf-query -l sample.vcf | wc -l   or   bcftools query -l sample.vcf | wc -l
+
+# 4. How many variants are in the file
+	By counting lines that dont start with "##"
+grep -v "^#" sample.vcf | wc -l 
+
+# 5. How would you extract the chromosome, position, QualByDepth and RMSMappingQuality fields? Save the output to a tab-delimited file
+	To quicken processing, we first create a bcf then index it.
+
+bcftools view -O b <sample.vcf> -o <sample.bcf>
+bcftools index sample.bcf 
+bcftools query -f '%CHROM\t%POS[\t%QD;%MQ]\n' sample.vcf > no_5_output.vcf
+
+# 6. Extract data that belongs to chromosomes 2,4 and MT
+
+awk '$1=="2" || $1=="4" || $1=="MT"' sample.vcf > no_6_output.vcf
+
+# 7. Print out variants that do not belong to chr20:1-30000000
+
+grep -v '^##' sample.vcf > variants.txt ; awk -F '\t' '($1 != "chr20" || $2 > 30000000) {print $1, $2, $4, $5}' variants.txt > no_7_output.vcf ; cat no_7_output.vcf 
+
+# 8. Extract variants that belong to SRR13107019
+
+bcftools query -f '%CHROM\t%POS\t%REF\t%ALT\n' -s SRR13107019 sample.vcf > no_8_output.txt
+
+# 9. Filter out variants with a QualByDepth above 7
+
+bcftools filter -i 'QD > 7' sample.vcf > no_9_output.vcf
+
+# 10. How many contigs are referred to in the file. Check the header section
+	2211 contigs
+
+grep -c "^##contig" sample.vcf
+
+# 11. Comment on the eighth and ninth columns of the file
+
+	They contain information including genotype, read depth, and quality scores
+
+# 12. Extract data on the read depth of called variants for sample SRR13107018
+
+bcftools query -f '%DP\n' -s SRR13107018 sample.vcf > SRR13107018_read_depth.vcf
+
+# 13. Extract data on the allele frequency of alternate alleles. Combine this data with the chromosome and position of the alternate allele
+
+bcftools query -f '%CHROM\t%POS\t%ALT\t%AF\n' sample.vcf > Allele_freqs_Alt_alleles.vcf 
+
+
+## Manipulating SAM files
+
+# 1. Describe the format of the file and the data stored
+	The sequence alignment map is a tab-delimited text file, with each line representing a single alignment and the fields within each line providing 
+	specific information about that alignment. It includes the fields; QNAME: the query (i.e., read) name
+		FLAG: bitwise flag indicating the status of the alignment
+		RNAME: the reference sequence name
+		POS: the position of the alignment on the reference
+		MAPQ: the mapping quality of the alignment
+		CIGAR: the CIGAR string describing the alignment
+		RNEXT: the name of the reference sequence for the next segment
+		PNEXT: the position of the next segment
+		TLEN: the observed template length
+		SEQ: the query sequence
+		QUAL: the query quality scores
+
+# 2. What does the header section of the file contain
+	The header section contains metadata about the alignment data stored in the file. It is preceded by the "@" symbol. The header lines contain;
+		@HD: describes the version of the SAM format and the sorting order of the alignments.
+		@SQ: describes the reference sequences used in the alignment.
+		@RG: describes the read groups in the alignment.
+		@PG: describes the programs used to generate the alignments.
+		@CO: has free-text comments.
+
+# 3. How many samples are in the file
+	249
+
+	By counting read group lines, these are unique to sample
+grep -c '@RG' sample.sam
+
+# 4. How many alignments are in the file
+	35511
+
+	Counting non-header lines.
+samtools view -F 4 sample.sam | wc -l
+
+# 5. Get summary statistics for the alignments in the file
+	
+samtools flagstat sample.sam > alignment_stats.txt
+
+# 6. Count the number of fields in the file
+	18 fields
+
+awk '{print NF}' sample.sam | sort -nu | tail -1
+
+#7. Print all lines in the file that have @SQ and sequence name tag beginning with NT_
+
+grep "^@SQ.*NT_" sample.sam
+
+# 8. Print all lines in the file that have @RG and LB tag beginning with Solexa
+
+grep "^@RG.*LB:Solexa" sample.sam
+
+# 9. Extract primarily aligned sequences and save them in another file
+
+samtools view -F 4 -h sample.sam -o no_9_output.sam
+
+# 10. Extract alignments that map to chromosomes 1 and 3. Save the output in BAM format
+
+samtools view -Sb sample.sam > sample.bam ; samtools view -b sample.bam chr1 chr3 > chromosomes1and3_alignments.bam
+
+# 11. How would you obtain unmapped reads from the file
+
+
+samtools view -f 4 -b sample.bam > unmapped_reads.bam
+
+# 12. How many reads are aligned to chromosome 4
+
+
+samtools view sample.bam | awk '{print $3 == "4"}' | uniq -c
+
+# 13. Comment of the second and sixth column of the file
+
+The second column is the FLAG field and that encodes various properties of the alignment in binary format.
+Each bit of the FLAG corresponds to a specific attribute of the alignment, such as whether the read is paired-end, whether it is mapped in a proper pair,
+or whether it is the first or second read in a pair.
+The sixth column is the CIGAR field and describes the alignment of the read to the reference sequence. 
+The CIGAR field can be used to determine the alignment quality, the insertions, deletions, and clipping events that have occurred in the read and the reference
+Together, the FLAG and CIGAR fields provide essential information about the alignment of the read to the reference sequence.
+
+# 14. Extract all optional fields of the file and save them in “optional_fields.txt”
+
+awk '{for(i=11;i<=NF;i++) print $i}' sample.sam > optional_fields.txt
+
+
+
